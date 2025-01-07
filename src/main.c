@@ -10,36 +10,41 @@
 
 #define rpmPotGPIO ADC1_CHANNEL_5
 #define CKP_GPIO GPIO_NUM_25
+#define CMP_GPIO GPIO_NUM_26
 
 //Custom Settings
 int minRPM = 600;
 int maxRPM = 10000;
 int delayToUpdateRPM = 300;
-int totalTeeth = 70;
-int missingTeeth = 20;
+int totalTeeth = 60;
+int totalMissingTeeth = 2;
+int cmpTeeth[] = {14, 19};
+int cmpCount = sizeof(cmpTeeth) / sizeof(cmpTeeth[0]);
 
 int rpm = 600;
 char displayMessage[16];
+int currentTooth = 0;
 
 long map(long x, long in_min, long in_max, long out_min, long out_max);
 
 void updateRPM (void* pvParameter);
 void displayRPM (void* pvParameter);
-void generateCKP (void* pvParameter);
+void generateSignal (void* pvParameter);
 
 void app_main() {
     //Init GPIO of RPM potentiometer
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(rpmPotGPIO,ADC_ATTEN_DB_12);
 
-    //Init GPIO of CKP
-    gpio_set_direction(CKP_GPIO, GPIO_MODE_OUTPUT); 
+    //Init GPIO of output signal
+    gpio_set_direction(CKP_GPIO, GPIO_MODE_OUTPUT);
+    gpio_set_direction(CMP_GPIO, GPIO_MODE_OUTPUT);
     
     //Init LCD display
     LCD_init(0x27, 21, 22, 16, 2);
     LCD_clearScreen();
 
-    //Start update RPM loop
+    //Start RPM updater
     xTaskCreatePinnedToCore (
         updateRPM,     // Function to implement the task
         "updateRPM",   // Name of the task
@@ -50,7 +55,7 @@ void app_main() {
         1          // Core where the task should run
     );
 
-    //Start update Display loop
+    //Start Display
     xTaskCreatePinnedToCore (
         displayRPM,     // Function to implement the task
         "displayRPM",   // Name of the task
@@ -60,10 +65,10 @@ void app_main() {
         NULL,      // Task handle.
         1          // Core where the task should run
     );
-    //Start CKP Signal
+    //Start Signal
     xTaskCreatePinnedToCore (
-        generateCKP,     // Function to implement the task
-        "generateCKP",   // Name of the task
+        generateSignal,     // Function to implement the task
+        "generateSignal",   // Name of the task
         2048,      // Stack size in bytes
         NULL,      // Task input parameter
         5,         // Priority of the task
@@ -83,7 +88,6 @@ void updateRPM (void* pvParameter) {
 
 void displayRPM (void* pvParameter) {
     while (true) {
-
         LCD_home();
         snprintf(displayMessage, sizeof(displayMessage), "RPM: %d       ", rpm);
         LCD_writeStr(displayMessage);
@@ -91,20 +95,40 @@ void displayRPM (void* pvParameter) {
     }
 }
 
-void generateCKP (void* pvParameter) {
+void generateSignal (void* pvParameter) {
     while (true) {
-        
         int period = 60000000 / (rpm * 60);           // Calculates the period of one tooth in µs
-        int realTeeth = totalTeeth - missingTeeth;       // Number of teeth that will generate signal
-        int periodFalseTeeth = missingTeeth * period;    // The period of the missing teeth
-  
-        for (int teeth = 0; teeth < realTeeth; teeth++) {
-            gpio_set_level(CKP_GPIO, 1);
-            ets_delay_us(period / 2);
-            gpio_set_level(CKP_GPIO, 0);
-            ets_delay_us(period / 2);
+        int realTeeth = totalTeeth - totalMissingTeeth;
+        int cmpState = 0;
+
+        for (int ckpTooth = 0; ckpTooth < totalTeeth; ckpTooth++) {
+            currentTooth++;
+
+            // Checks if the currentTooth is the cmp and change its state
+            for (int i = 0; i < cmpCount; i++) {
+                if (currentTooth == cmpTeeth[i]) {
+                    cmpState = !cmpState;
+                    gpio_set_level(CMP_GPIO, cmpState);
+                }
+            }
+
+            // Generate 1 tooth of the CKP signal
+            if (ckpTooth < realTeeth) {
+                gpio_set_level(CKP_GPIO, 1);
+                ets_delay_us(period / 2);
+                gpio_set_level(CKP_GPIO, 0);
+                ets_delay_us(period / 2);
+            }
+            else {
+                ets_delay_us(period);
+            }
+            
+            // Reset the counter of the currentTooth every 2 cycle of the CKP signal
+            if (currentTooth >= totalTeeth * 2){
+                currentTooth = 0;
+            }
+
         }
-        ets_delay_us(periodFalseTeeth);
     }
 }
 
