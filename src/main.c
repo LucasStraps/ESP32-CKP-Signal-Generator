@@ -18,8 +18,9 @@ int maxRPM = 10000;
 int delayToUpdateRPM = 300;
 int totalTeeth = 60;
 int totalMissingTeeth = 2;
-int cmpTeeth[] = {14, 19};
+int cmpTeeth[] = {14, 19, 27, 49, 57, 79, 104, 110};
 int cmpCount = sizeof(cmpTeeth) / sizeof(cmpTeeth[0]);
+int cmpState = 0;
 
 int rpm = 600;
 char displayMessage[16];
@@ -99,7 +100,6 @@ void generateSignal (void* pvParameter) {
     while (true) {
         int period = 60000000 / (rpm * 60);           // Calculates the period of one tooth in µs
         int realTeeth = totalTeeth - totalMissingTeeth;
-        int cmpState = 0;
 
         for (int ckpTooth = 0; ckpTooth < totalTeeth; ckpTooth++) {
             currentTooth++;
