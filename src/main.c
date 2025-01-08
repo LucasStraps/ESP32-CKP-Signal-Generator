@@ -12,19 +12,25 @@
 #define CKP_GPIO GPIO_NUM_25
 #define CMP_GPIO GPIO_NUM_26
 
+typedef struct {
+    char syncName[16];
+    int totalTeeth;
+    int totalMissingTeeth;
+    int cmpTeeth[10];
+} synchronism;
+
 //Custom Settings
 int minRPM = 600;
 int maxRPM = 10000;
 int delayToUpdateRPM = 300;
-int totalTeeth = 60;
-int totalMissingTeeth = 2;
-int cmpTeeth[] = {14, 19, 27, 49, 57, 79, 104, 110};
-int cmpCount = sizeof(cmpTeeth) / sizeof(cmpTeeth[0]);
-int cmpState = 0;
 
+synchronism syncTable[] = {
+    {"Gol G5 60-2", 60, 2, {14, 19, 27, 49, 57, 79, 104, 110}}
+};
+
+int selectedSync = 0;
 int rpm = 600;
 char displayMessage[16];
-int currentTooth = 0;
 
 long map(long x, long in_min, long in_max, long out_min, long out_max);
 
@@ -97,16 +103,21 @@ void displayRPM (void* pvParameter) {
 }
 
 void generateSignal (void* pvParameter) {
-    while (true) {
-        int period = 60000000 / (rpm * 60);           // Calculates the period of one tooth in µs
-        int realTeeth = totalTeeth - totalMissingTeeth;
+    synchronism sync = syncTable[selectedSync];
+    int currentTooth = 0;
+    int cmpCount = sizeof(sync.cmpTeeth) / sizeof(sync.cmpTeeth[0]);
+    int cmpState = 0;
 
-        for (int ckpTooth = 0; ckpTooth < totalTeeth; ckpTooth++) {
+    while (true) {
+        int period = 60000000 / (rpm * sync.totalTeeth);           // Calculates the period of one tooth in µs
+        int realTeeth = sync.totalTeeth - sync.totalMissingTeeth;
+
+        for (int ckpTooth = 0; ckpTooth < sync.totalTeeth; ckpTooth++) {
             currentTooth++;
 
             // Checks if the currentTooth is the cmp and change its state
             for (int i = 0; i < cmpCount; i++) {
-                if (currentTooth == cmpTeeth[i]) {
+                if (currentTooth == sync.cmpTeeth[i]) {
                     cmpState = !cmpState;
                     gpio_set_level(CMP_GPIO, cmpState);
                 }
@@ -124,7 +135,7 @@ void generateSignal (void* pvParameter) {
             }
             
             // Reset the counter of the currentTooth every 2 cycle of the CKP signal
-            if (currentTooth >= totalTeeth * 2){
+            if (currentTooth >= sync.totalTeeth * 2){
                 currentTooth = 0;
             }
 
