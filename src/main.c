@@ -1,5 +1,5 @@
 #include <driver/i2c.h>
-#include <driver/adc.h>
+#include <esp_adc/adc_oneshot.h>
 #include <driver/gpio.h>
 #include <rom/ets_sys.h>
 #include <freertos/FreeRTOS.h>
@@ -7,17 +7,11 @@
 #include <stdio.h>
 #include "sdkconfig.h"
 #include "HD44780.h"
+#include "menu.h"
 
-#define rpmPotGPIO ADC1_CHANNEL_5
+#define RPM_GPIO ADC_CHANNEL_4
 #define CKP_GPIO GPIO_NUM_25
 #define CMP_GPIO GPIO_NUM_26
-
-typedef struct {
-    char syncName[16];
-    int totalTeeth;
-    int totalMissingTeeth;
-    int cmpTeeth[10];
-} synchronism;
 
 //Custom Settings
 int minRPM = 600;
@@ -25,7 +19,10 @@ int maxRPM = 10000;
 int delayToUpdateRPM = 300;
 
 synchronism syncTable[] = {
-    {"Gol G5 60-2", 60, 2, {14, 19, 27, 49, 57, 79, 104, 110}}
+    {"VW 60-2", 60, 2, {14, 19, 27, 49, 57, 79, 104, 110}, 8},
+    {"Fire 60-2", 60, 2, {8, 30, 38, 59, 68, 99}, 6},
+    {"Sync Test", 100, 4, {50, 51}, 2},
+    {"", 0, 0, {0}, 0} // end indicator
 };
 
 int selectedSync = 0;
@@ -37,12 +34,11 @@ long map(long x, long in_min, long in_max, long out_min, long out_max);
 void updateRPM (void* pvParameter);
 void displayRPM (void* pvParameter);
 void generateSignal (void* pvParameter);
+void startUpdateRPM();
+void startDisplayRPM();
+void startGenerateSignal();
 
 void app_main() {
-    //Init GPIO of RPM potentiometer
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(rpmPotGPIO,ADC_ATTEN_DB_12);
-
     //Init GPIO of output signal
     gpio_set_direction(CKP_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_direction(CMP_GPIO, GPIO_MODE_OUTPUT);
@@ -51,49 +47,32 @@ void app_main() {
     LCD_init(0x27, 21, 22, 16, 2);
     LCD_clearScreen();
 
-    //Start RPM updater
-    xTaskCreatePinnedToCore (
-        updateRPM,     // Function to implement the task
-        "updateRPM",   // Name of the task
-        1024,      // Stack size in bytes
-        NULL,      // Task input parameter
-        5,         // Priority of the task
-        NULL,      // Task handle.
-        1          // Core where the task should run
-    );
-
-    //Start Display
-    xTaskCreatePinnedToCore (
-        displayRPM,     // Function to implement the task
-        "displayRPM",   // Name of the task
-        2048,      // Stack size in bytes
-        NULL,      // Task input parameter
-        5,         // Priority of the task
-        NULL,      // Task handle.
-        1          // Core where the task should run
-    );
-    //Start Signal
-    xTaskCreatePinnedToCore (
-        generateSignal,     // Function to implement the task
-        "generateSignal",   // Name of the task
-        2048,      // Stack size in bytes
-        NULL,      // Task input parameter
-        5,         // Priority of the task
-        NULL,      // Task handle.
-        0          // Core where the task should run
-    );    
-
+    syncSelectMenu();
+    startUpdateRPM();
+    startDisplayRPM();
+    startGenerateSignal();
+    
 }
 
 void updateRPM (void* pvParameter) {
+    printf("UpdateRPM started\n");
+    int rpmPotValue = 0;
+    adc_oneshot_unit_handle_t rpmPotHandle;
+    adc_oneshot_unit_init_cfg_t rpmPotInitConfig = {.unit_id = ADC_UNIT_2};
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&rpmPotInitConfig, &rpmPotHandle));
+
+    adc_oneshot_chan_cfg_t rpmPotChanConfig = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_12};
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(rpmPotHandle, RPM_GPIO , &rpmPotChanConfig));
+
     while (true) {
-        int rpmPotValue = adc1_get_raw(rpmPotGPIO);
+        ESP_ERROR_CHECK(adc_oneshot_read(rpmPotHandle, RPM_GPIO, &rpmPotValue));
         rpm = map(rpmPotValue, 0, 4095, minRPM, maxRPM);
         vTaskDelay(pdMS_TO_TICKS(delayToUpdateRPM));
     }
 }
 
 void displayRPM (void* pvParameter) {
+    printf("display RPM Started\n");
     while (true) {
         LCD_home();
         snprintf(displayMessage, sizeof(displayMessage), "RPM: %d       ", rpm);
@@ -103,9 +82,9 @@ void displayRPM (void* pvParameter) {
 }
 
 void generateSignal (void* pvParameter) {
+    printf("Started signal\n");
     synchronism sync = syncTable[selectedSync];
     int currentTooth = 0;
-    int cmpCount = sizeof(sync.cmpTeeth) / sizeof(sync.cmpTeeth[0]);
     int cmpState = 0;
 
     while (true) {
@@ -116,7 +95,7 @@ void generateSignal (void* pvParameter) {
             currentTooth++;
 
             // Checks if the currentTooth is the cmp and change its state
-            for (int i = 0; i < cmpCount; i++) {
+            for (int i = 0; i < sync.cmpCount; i++) {
                 if (currentTooth == sync.cmpTeeth[i]) {
                     cmpState = !cmpState;
                     gpio_set_level(CMP_GPIO, cmpState);
@@ -138,7 +117,6 @@ void generateSignal (void* pvParameter) {
             if (currentTooth >= sync.totalTeeth * 2){
                 currentTooth = 0;
             }
-
         }
     }
 }
@@ -147,4 +125,40 @@ long map(long x, long in_min, long in_max, long out_min, long out_max) {
 
       return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 
+}
+
+void startUpdateRPM () {
+    xTaskCreatePinnedToCore (
+        updateRPM,     // Function to implement the task
+        "updateRPM",   // Name of the task
+        1024,      // Stack size in bytes
+        NULL,      // Task input parameter
+        5,         // Priority of the task
+        NULL,      // Task handle.
+        1          // Core where the task should run
+    );
+}
+
+void startDisplayRPM () {
+    xTaskCreatePinnedToCore (
+        displayRPM,     // Function to implement the task
+        "displayRPM",   // Name of the task
+        2048,      // Stack size in bytes
+        NULL,      // Task input parameter
+        5,         // Priority of the task
+        NULL,      // Task handle.
+        1          // Core where the task should run
+    );
+}
+
+void startGenerateSignal () {
+    xTaskCreatePinnedToCore (
+        generateSignal,     // Function to implement the task
+        "generateSignal",   // Name of the task
+        2048,      // Stack size in bytes
+        NULL,      // Task input parameter
+        5,         // Priority of the task
+        NULL,      // Task handle.
+        0          // Core where the task should run
+    );
 }
