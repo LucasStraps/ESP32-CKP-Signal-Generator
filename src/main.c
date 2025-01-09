@@ -124,6 +124,7 @@ void generateSignal (void* pvParameter) {
         if (readButton(BUTTON_BACK)) {
             printf("Back button pressed, restarting device...\n");
             generatingSignal = false;
+            app_main();
         }
     }
 }
