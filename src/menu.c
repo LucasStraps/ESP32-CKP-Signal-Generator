@@ -1,10 +1,5 @@
 #include "menu.h"
 
-#define BUTTON_UP     GPIO_NUM_34
-#define BUTTON_DOWN   GPIO_NUM_32
-#define BUTTON_BACK   GPIO_NUM_33
-#define BUTTON_CONFIRM GPIO_NUM_35
-
 void setupButtons() {
     gpio_set_direction(BUTTON_UP, GPIO_MODE_INPUT);
     gpio_set_direction(BUTTON_DOWN, GPIO_MODE_INPUT);

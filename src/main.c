@@ -28,6 +28,7 @@ synchronism syncTable[] = {
 int selectedSync = 0;
 int rpm = 600;
 char displayMessage[16];
+bool generatingSignal;
 
 long map(long x, long in_min, long in_max, long out_min, long out_max);
 
@@ -48,6 +49,7 @@ void app_main() {
     LCD_clearScreen();
 
     syncSelectMenu();
+    generatingSignal = true;
     startUpdateRPM();
     startDisplayRPM();
     startGenerateSignal();
@@ -64,7 +66,7 @@ void updateRPM (void* pvParameter) {
     adc_oneshot_chan_cfg_t rpmPotChanConfig = {.bitwidth = ADC_BITWIDTH_12, .atten = ADC_ATTEN_DB_12};
     ESP_ERROR_CHECK(adc_oneshot_config_channel(rpmPotHandle, RPM_GPIO , &rpmPotChanConfig));
 
-    while (true) {
+    while (generatingSignal) {
         ESP_ERROR_CHECK(adc_oneshot_read(rpmPotHandle, RPM_GPIO, &rpmPotValue));
         rpm = map(rpmPotValue, 0, 4095, minRPM, maxRPM);
         vTaskDelay(pdMS_TO_TICKS(delayToUpdateRPM));
@@ -73,7 +75,7 @@ void updateRPM (void* pvParameter) {
 
 void displayRPM (void* pvParameter) {
     printf("display RPM Started\n");
-    while (true) {
+    while (generatingSignal) {
         LCD_home();
         snprintf(displayMessage, sizeof(displayMessage), "RPM: %d       ", rpm);
         LCD_writeStr(displayMessage);
@@ -87,7 +89,7 @@ void generateSignal (void* pvParameter) {
     int currentTooth = 0;
     int cmpState = 0;
 
-    while (true) {
+    while (generatingSignal) {
         int period = 60000000 / (rpm * sync.totalTeeth);           // Calculates the period of one tooth in µs
         int realTeeth = sync.totalTeeth - sync.totalMissingTeeth;
 
@@ -117,6 +119,11 @@ void generateSignal (void* pvParameter) {
             if (currentTooth >= sync.totalTeeth * 2){
                 currentTooth = 0;
             }
+        }
+        // Restart device:
+        if (readButton(BUTTON_BACK)) {
+            printf("Back button pressed, restarting device...\n");
+            generatingSignal = false;
         }
     }
 }
