@@ -1,4 +1,4 @@
-#include <driver/i2c.h>
+#include <driver/i2c_master.h>
 #include <esp_adc/adc_oneshot.h>
 #include <driver/gpio.h>
 #include <rom/ets_sys.h>
@@ -12,7 +12,6 @@
 #define RPM_GPIO ADC_CHANNEL_4
 #define CKP_GPIO GPIO_NUM_25
 #define CMP_GPIO GPIO_NUM_26
-
 //Custom Settings
 int minRPM = 600;
 int maxRPM = 10000;
@@ -39,7 +38,7 @@ void startUpdateRPM();
 void startDisplayRPM();
 void startGenerateSignal();
 
-void app_main() {
+extern void app_main() {
     //Init GPIO of output signal
     gpio_set_direction(CKP_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_direction(CMP_GPIO, GPIO_MODE_OUTPUT);

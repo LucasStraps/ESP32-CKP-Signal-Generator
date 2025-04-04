@@ -1,4 +1,5 @@
 #include "menu.h"
+#include <stdio.h>
 
 void setupButtons() {
     gpio_set_direction(BUTTON_UP, GPIO_MODE_INPUT);

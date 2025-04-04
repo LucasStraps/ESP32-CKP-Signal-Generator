@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "src/HD44780.c"
-    INCLUDE_DIRS "include"
+    SRCS "HD44780.c" 
+    INCLUDE_DIRS "."
     REQUIRES driver
 )
