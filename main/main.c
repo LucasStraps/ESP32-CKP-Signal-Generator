@@ -1,6 +1,5 @@
-#include <driver/i2c_master.h>
-#include <esp_adc/adc_oneshot.h>
 #include <driver/gpio.h>
+#include <esp_adc/adc_oneshot.h>
 #include <rom/ets_sys.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -12,7 +11,7 @@
 #define RPM_GPIO ADC_CHANNEL_4
 #define CKP_GPIO GPIO_NUM_25
 #define CMP_GPIO GPIO_NUM_26
-//Custom Settings
+// Custom Settings
 int minRPM = 600;
 int maxRPM = 10000;
 int delayToUpdateRPM = 300;
@@ -37,9 +36,10 @@ void generateSignal (void* pvParameter);
 void startUpdateRPM();
 void startDisplayRPM();
 void startGenerateSignal();
+void startCheckForRestart();
 
 extern void app_main() {
-    //Init GPIO of output signal
+    // Init GPIO of output signal
     gpio_set_direction(CKP_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_direction(CMP_GPIO, GPIO_MODE_OUTPUT);
     
@@ -47,12 +47,13 @@ extern void app_main() {
     LCD_init(0x27, 21, 22, 16, 2);
     LCD_clearScreen();
 
+    // Display menu and start tasks
     syncSelectMenu();
     generatingSignal = true;
     startUpdateRPM();
     startDisplayRPM();
     startGenerateSignal();
-    
+    startCheckForRestart();
 }
 
 void updateRPM (void* pvParameter) {
@@ -70,6 +71,8 @@ void updateRPM (void* pvParameter) {
         rpm = map(rpmPotValue, 0, 4095, minRPM, maxRPM);
         vTaskDelay(pdMS_TO_TICKS(delayToUpdateRPM));
     }
+    printf("updateRPM task ending\n");
+    vTaskDelete(NULL);
 }
 
 void displayRPM (void* pvParameter) {
@@ -80,6 +83,8 @@ void displayRPM (void* pvParameter) {
         LCD_writeStr(displayMessage);
         vTaskDelay(pdMS_TO_TICKS(delayToUpdateRPM));
     }
+    printf("displayRPM task ending\n");
+    vTaskDelete(NULL);
 }
 
 void generateSignal (void* pvParameter) {
@@ -89,7 +94,8 @@ void generateSignal (void* pvParameter) {
     int cmpState = 0;
 
     while (generatingSignal) {
-        int period = 60000000 / (rpm * sync.totalTeeth);           // Calculates the period of one tooth in µs
+        int oneMinuteinUs = 60000000;
+        int period = oneMinuteinUs / (rpm * sync.totalTeeth);  // Calculates the period of one tooth in µs
         int realTeeth = sync.totalTeeth - sync.totalMissingTeeth;
 
         for (int ckpTooth = 0; ckpTooth < sync.totalTeeth; ckpTooth++) {
@@ -119,19 +125,25 @@ void generateSignal (void* pvParameter) {
                 currentTooth = 0;
             }
         }
-        // Restart device:
-        if (readButton(BUTTON_BACK)) {
-            printf("Back button pressed, restarting device...\n");
+    }
+    printf("generateSignal task ending\n");
+    vTaskDelete(NULL);
+}
+void checkForRestart(void* pvParameter) {
+    printf("Restart check task started\n");
+    while (generatingSignal) {
+        if (readButton(BUTTON_CONFIRM) || readButton(BUTTON_UP) || readButton(BUTTON_DOWN)) {
+            printf("Button pressed, restarting device...\n");
             generatingSignal = false;
-            app_main();
+            vTaskDelay(pdMS_TO_TICKS(250)); 
+            printf("Restarting device...\n");
+            esp_restart(); 
         }
+        vTaskDelay(pdMS_TO_TICKS(250)); 
     }
 }
-
 long map(long x, long in_min, long in_max, long out_min, long out_max) {
-
-      return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
 void startUpdateRPM () {
@@ -167,5 +179,16 @@ void startGenerateSignal () {
         5,         // Priority of the task
         NULL,      // Task handle.
         0          // Core where the task should run
+    );
+}
+void startCheckForRestart() {
+    xTaskCreatePinnedToCore (
+        checkForRestart,     // Function to implement the task
+        "checkForRestart",   // Name of the task
+        2048,      // Stack size in bytes
+        NULL,      // Task input parameter
+        5,         // Priority of the task
+        NULL,      // Task handle.
+        1          // Core where the task should run
     );
 }
