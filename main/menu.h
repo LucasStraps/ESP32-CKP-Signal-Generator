@@ -7,10 +7,9 @@
 #include <driver/gpio.h>
 #include <stdio.h>
 #include "HD44780.h"
-#define BUTTON_UP     GPIO_NUM_34
-#define BUTTON_DOWN   GPIO_NUM_32
-#define BUTTON_BACK   GPIO_NUM_33
-#define BUTTON_CONFIRM GPIO_NUM_35
+#define BUTTON_UP     GPIO_NUM_23
+#define BUTTON_DOWN   GPIO_NUM_18
+#define BUTTON_CONFIRM GPIO_NUM_19
 
 typedef struct {
     char syncName[15];

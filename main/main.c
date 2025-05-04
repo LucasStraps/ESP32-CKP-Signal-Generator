@@ -8,13 +8,16 @@
 #include "HD44780.h"
 #include "menu.h"
 
-#define RPM_GPIO ADC_CHANNEL_4
-#define CKP_GPIO GPIO_NUM_25
-#define CMP_GPIO GPIO_NUM_26
+#define RPM_GPIO ADC_CHANNEL_0
+#define CKP_GPIO GPIO_NUM_27
+#define CMP_GPIO GPIO_NUM_25
+#define LCD_SDL GPIO_NUM_21
+#define LCD_SCL GPIO_NUM_22
+
 // Custom Settings
 int minRPM = 600;
 int maxRPM = 10000;
-int delayToUpdateRPM = 300;
+int delayToUpdateRPM = 300; // Delay to update RPM in ms
 
 synchronism syncTable[] = {
     {"VW 60-2", 60, 2, {14, 19, 27, 49, 57, 79, 104, 110}, 8},
@@ -44,7 +47,7 @@ extern void app_main() {
     gpio_set_direction(CMP_GPIO, GPIO_MODE_OUTPUT);
     
     //Init LCD display
-    LCD_init(0x27, 21, 22, 16, 2);
+    LCD_init(0x27, LCD_SDL, LCD_SCL, 16, 2);
     LCD_clearScreen();
 
     // Display menu and start tasks

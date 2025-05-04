@@ -5,10 +5,13 @@ void setupButtons() {
     gpio_set_direction(BUTTON_UP, GPIO_MODE_INPUT);
     gpio_set_direction(BUTTON_DOWN, GPIO_MODE_INPUT);
     gpio_set_direction(BUTTON_CONFIRM, GPIO_MODE_INPUT);
+    gpio_pullup_en(BUTTON_UP);
+    gpio_pullup_en(BUTTON_DOWN);   
+    gpio_pullup_en(BUTTON_CONFIRM);
 }
 
 int readButton(gpio_num_t button) {
-    return gpio_get_level(button);
+    return !gpio_get_level(button);
 }
 
 int getSyncCount() {
