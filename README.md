@@ -21,6 +21,41 @@ A project designed to generate CKP and CMP signals for bench-testing an ECU. Thi
 - **Complete Schematics:**  
   All necessary schematics for building the hardware are provided with the project.
 
+- **Create Custom Signal:**
+  It allows to create full custom signals.
+
+---
+
+## Using a Custom Signal
+
+To define and use a custom synchronization signal, you need to edit the `syncTable[]` struct array. Each entry in this array represents a unique synchronization pattern used by the system.
+
+### Syntax:
+
+```cpp
+{"syncName", totalTeeth, totalMissingTeeth, {cmpTeeth}, cmpCount}
+```
+
+### Parameter Descriptions:
+
+* **syncName** (`string`): A descriptive name for the custom signal.
+* **totalTeeth** (`int`): Total number of crankshaft position (CKP) teeth in the signal.
+* **totalMissingTeeth** (`int`): Number of missing teeth used for synchronization.
+* **cmpTeeth** (`array of int`): The CKP tooth indices at which the camshaft position (CMP) signal changes its state (high ↔ low).
+* **cmpCount** (`int`): Total number of CMP transitions within one engine cycle.
+
+### Example:
+
+```cpp
+{"Sync Test", 100, 4, {50, 51}, 2}
+```
+
+This defines a signal named **"Sync Test"** with the following properties:
+
+* 100 total CKP teeth
+* 4 missing teeth
+* CMP signal changes state at teeth **50** and **51**
+* 2 CMP transitions in total
 
 ---
 
